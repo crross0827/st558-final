@@ -159,9 +159,8 @@ ui <- navbarPage("Horse Colic",
                             sidebarLayout(
                               sidebarPanel(
                                 p("Use the model to predict a new data point. \
-                                  Default values are medians.)"),
+                                  Default values are medians."),
                                 uiOutput("new_point")
-                                # actionButton("predict", "Predict New Point")
                               ),
                               mainPanel(
                                 textOutput("prediction")
@@ -169,8 +168,7 @@ ui <- navbarPage("Horse Colic",
                             ) 
                             ) # end of tab
                  )
-               ) #visualization, model summary, performance & preds
-               # tab or radio button for  each?
+               ) 
              )
            ) # end tab
         )

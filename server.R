@@ -405,6 +405,19 @@ server <- function(input, output) {
       }
     })
     
+    # get text to display in main panel
+    output$prediction <- renderText({
+      
+      if (!exists("model")) {
+        message <- "Train a model before making a prediction."
+      }
+      else {
+        message <- paste0("Predicted ", target_static, " for the new point is ", pred())
+      }
+      return(message)
+    })
+    
+    # get prediction value
     pred <- reactive({
       
       dummy <- input$train
@@ -442,6 +455,7 @@ server <- function(input, output) {
       
     })
     
+    
     # === FOR MAIN PANEL
     
     # output summary
@@ -460,18 +474,6 @@ server <- function(input, output) {
     })
 
     
-  })
-  
-  # text for prediction
-  output$prediction <- renderText({
-    
-    if (!exists("model")) {
-      message <- "Train a model before making a prediction."
-    }
-    else {
-      message <- paste0("Predicted ", target_static, " for the new point is ", pred())
-    }
-    return(message)
   })
   
 
