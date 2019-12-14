@@ -167,9 +167,7 @@ ui <- navbarPage("Horse Colic",
                                 textOutput("prediction")
                               )
                             ) 
-                            ), # end of tab
-                   tabPanel("Model Performance"),
-                   tabPanel("Visualization")
+                            ) # end of tab
                  )
                ) #visualization, model summary, performance & preds
                # tab or radio button for  each?

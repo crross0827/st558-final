@@ -8,7 +8,7 @@ library(plotly)
 library(DT)
 library(randomForest)
 
-
+# function to preprocess the data
 process_data <- function(colics) {
   
   # specify column names
@@ -80,62 +80,54 @@ process_data <- function(colics) {
 
 
 # data from https://archive.ics.uci.edu/ml/datasets/Horse+Colic
-train <- read_delim("../horse-colic.data", " ", col_names=FALSE, na=c("?"))
-test <- read_delim("../horse-colic.test", " ", col_names=FALSE, na=c("?"))
+# presplit into train and test sets
+train <- read_delim("horse-colic.data", " ", col_names=FALSE, na=c("?"))
+test <- read_delim("horse-colic.test", " ", col_names=FALSE, na=c("?"))
 
+# combine into one data set and process with function above
 colics <- rbind(train, test)
 colics <- process_data(colics)
 
+# get rid of columns with more than 20% NAs
 for (x in names(colics)) {
   if (sum(is.na(colics[x])==TRUE) > 0.2*nrow(colics)) {
     colics <- select(colics, -x)
   }
 }
 
+# get rid of rows with NAs in remaining columns
 colics <- na.omit(colics)
 
-## 80% of the sample size
+## 80% of the sample size for train/test split
 smp_size <- floor(0.80 * nrow(colics))
 
-## set the seed to make your partition reproducible
+# set the seed to make it reproducible
 set.seed(123)
+
+# get rows to be included in training set
 train_ind <- sample(seq_len(nrow(colics)), size = smp_size)
 
+# perform train/test split
 train <- colics[train_ind, ]
 test <- colics[-train_ind, ]
 
+# get list of numeric columns (used often below)
 nums <- unlist(lapply(colics, is.numeric))
 num_cols <- names(colics)[nums]
 
 server <- function(input, output) {
-
-  output$var1Selector <- renderUI({
-    selectInput("var1", "Choose Variable:", c('--none--', names(colics))) 
-  })
   
-  output$var2Selector <- renderUI({
-    data_names <- names(colics)
-    data_names <- data_names[data_names != input$var1]
-    selectInput("var2", "Choose Another Variable:", c('--none--', data_names)) 
-  })
+  # FOR RAW DATA TAB =====================================
   
-  output$bothQuant <- reactive({
-  if (exists("input$var1") & exists("input$var2")){
-    if ((input$var1 %in% num_cols) & (input$var2 %in% num_cols)) {
-      return(TRUE)
+  # Downloadable csv of selected dataset ----
+  output$downloadData <- downloadHandler(
+    filename = function() {
+      paste(input$dataset, ".csv", sep = "")
+    },
+    content = function(file) {
+      write.csv(datasetInput(), file, row.names = FALSE)
     }
-    else {return(FALSE)}
-  }
-  else {return(FALSE)}
-  })
-  
-  outputOptions(output, "bothQuant", suspendWhenHidden = FALSE)
-  
-  output$var3Selector <- renderUI({
-    nums <- unlist(lapply(colics, is.numeric))
-    fac_cols <- names(colics)[!nums]
-    selectInput("var3", "Color Points By:", c('--none--', fac_cols)) 
-  })
+  )
   
   # Reactive value for selected dataset ----
   datasetInput <- reactive({
@@ -150,6 +142,46 @@ server <- function(input, output) {
     datatable(datasetInput())
   })
   
+  # FOR DATA EXPLORATION TAB ==============================
+  
+  # === FOR SIDE PANEL
+  
+  # choose first variable
+  output$var1Selector <- renderUI({
+    selectInput("var1", "Choose Variable:", c('--none--', names(colics))) 
+  })
+  
+  # second variable can be any but not the same as the first
+  output$var2Selector <- renderUI({
+    data_names <- names(colics)
+    data_names <- data_names[data_names != input$var1]
+    selectInput("var2", "Choose Another Variable:", c('--none--', data_names)) 
+  })
+  
+  # for conditional panel for var3
+  output$bothQuant <- reactive({
+  if (exists("input$var1") & exists("input$var2")){
+    if ((input$var1 %in% num_cols) & (input$var2 %in% num_cols)) {
+      return(TRUE)
+    }
+    else {return(FALSE)}
+  }
+  else {return(FALSE)}
+  })
+  
+  # for conditional panel for var3
+  outputOptions(output, "bothQuant", suspendWhenHidden = FALSE)
+  
+  # var 3 can only be categorical and is used to color points
+  output$var3Selector <- renderUI({
+    nums <- unlist(lapply(colics, is.numeric))
+    fac_cols <- names(colics)[!nums]
+    selectInput("var3", "Color Points By:", c('--none--', fac_cols)) 
+  })
+  
+  # === FOR MAIN PANEL
+  
+  # generate numerical summary dependent on selected vars
   output$summaryTable <- renderTable({ 
 
     if (input$var1 == '--none--'){ # var1 is not selected
@@ -206,6 +238,7 @@ server <- function(input, output) {
     return(summary_tbl)
   })
   
+  # graphical summary dependent on selected vars
   output$plot <- renderPlotly({ 
 
     if (input$var1 == '--none--'){ # var1 is not selected
@@ -260,44 +293,65 @@ server <- function(input, output) {
     return(ggplotly(g))
   })
   
-  # Downloadable csv of selected dataset ----
-  output$downloadData <- downloadHandler(
-    filename = function() {
-      paste(input$dataset, ".csv", sep = "")
-    },
-    content = function(file) {
-      write.csv(datasetInput(), file, row.names = FALSE)
-    }
-  )
+  # FOR UNSUPERVISED LEARNING TAB =======================================
   
   # Check boxes to choose columns
   output$select_pca_vars <- renderUI({
     
     # Create the checkboxes and select them all by default
-    checkboxGroupInput("pca_vars", "Choose variables to include:", 
+  checkboxGroupInput("pca_vars", "Choose variables to include:", 
                        choices  = num_cols,
                        selected = num_cols)
   })
   
+  pca <- reactive({
+    # Keep the selected columns
+    # columns <- input$pca_vars
+    # data_sub <- data[, columns, drop = FALSE]
+    data_sub <- colics %>% select(input$pca_vars)
+    
+    pca_output <- prcomp(data_sub, 
+                         center = (input$center_vars == 'Yes'), 
+                         scale = (input$scale_vars == 'Yes'))
+    # data.frame of PCs
+    pcs_df <- cbind(colics, pca_output$x)
+    
+    return(list(data_sub = data_sub,
+                pca_output = pca_output, 
+                pcs_df = pcs_df))
+  })
+  
+  output$biplot <- renderPlot({
+    # would be good to figure out how not to cut off labels
+    # set xlim and ylim to be twice that of the ranges of the pcs?
+    # would also be good to vectorize which pcs are used for axes
+    # with the option choices=c(1,3)
+    return(biplot(pca()$pca_output))
+  })
+  
+  # FOR SUPERVISED LEARNING TAB ======================================
+  
+  # === FOR SIDE PANEL
+  
+  # mtry slider selector based on how many predictors are chosen
   output$mtry_selector <- renderUI({
     sliderInput("mtry", "number of predictors sampled at each split",
                 round(length(input$predictors)/3, 0), min = 1, 
                 max = length(input$predictors), step = 1)
   })
   
+  # choose multiple predictors to use, all available except chosen target variable
   output$select_predictors <- renderUI({
     
     predictors <- colics %>% select(-c(input$target))
     predictors <- names(predictors)
-    
-    # # Create the checkboxes and select them all by default
-    # checkboxGroupInput("predictors", "Choose predictors to include:", 
-    #                    choices  = predictors,
-    #                    selected = predictors)
+
     selectizeInput("predictors", "Choose predictor variables to include in the model:",
                    choices = setNames(predictors, predictors),
                    multiple = TRUE)
   })
+  
+  # === FOR PREDICT SUB TAB
   
   output$new_point <- renderUI({
     
@@ -314,6 +368,7 @@ server <- function(input, output) {
     do.call(tagList, dynamic_list)
   })
   
+  # === BACKEND PROCESSING
   
   observeEvent(input$train, {
     # show a progress bar
@@ -350,6 +405,46 @@ server <- function(input, output) {
       }
     })
     
+    pred <- reactive({
+      
+      dummy <- input$train
+      
+      if (exists("model") & exists("predictors_static")) {
+        if (length(predictors_static) > 0) {
+          temp <- train
+          
+          for (p in predictors_static){
+            if (p %in% num_cols){
+              temp[1, p] <- as.numeric(input[[paste0("new_", p)]])
+            }
+            else {
+              temp[1, p] <- input[[paste0("new_", p)]]
+            }
+          }
+          
+          new_point <- temp[1, predictors_static]
+          
+          if (model_type_static == "Random Forest") {
+            return(toString(predict(model, newdata = new_point)))
+          }
+          else {
+            prob <- predict(model, newdata = new_point, type = "response")
+            if (prob >= input$thresh) {
+              return(levels(train[[target_static]])[2])
+            }
+            else {
+              return(levels(train[[target_static]])[1])
+            }
+          }      
+        } else {return(NULL)}
+        
+      } else {return(NULL)}
+      
+    })
+    
+    # === FOR MAIN PANEL
+    
+    # output summary
     output$model_summary <- renderPrint({
       if (exists("model")){
         if (model_type_static == "Random Forest"){
@@ -367,6 +462,7 @@ server <- function(input, output) {
     
   })
   
+  # text for prediction
   output$prediction <- renderText({
     
     if (!exists("model")) {
@@ -378,65 +474,7 @@ server <- function(input, output) {
     return(message)
   })
   
-  pred <- reactive({
-    
-    dummy <- input$train
-    
-    if (exists("model") & exists("predictors_static")) {
-      if (length(predictors_static) > 0) {
-        temp <- train
-        
-        for (p in predictors_static){
-          if (p %in% num_cols){
-            temp[1, p] <- as.numeric(input[[paste0("new_", p)]])
-          }
-          else {
-            temp[1, p] <- input[[paste0("new_", p)]]
-          }
-        }
-        
-        new_point <- temp[1, predictors_static]
-        
-        if (model_type_static == "Random Forest") {
-          return(toString(predict(model, newdata = new_point)))
-        }
-        else {
-          prob <- predict(model, newdata = new_point, type = "response")
-          if (prob >= input$thresh) {
-            return(levels(train[[target_static]])[2])
-          }
-          else {
-            return(levels(train[[target_static]])[1])
-          }
-        }      
-      } else {return(NULL)}
-        
-      } else {return(NULL)}
-    
-  })
-  
-  pca <- reactive({
-    # Keep the selected columns
-    # columns <- input$pca_vars
-    # data_sub <- data[, columns, drop = FALSE]
-    data_sub <- colics %>% select(input$pca_vars)
 
-    pca_output <- prcomp(data_sub, 
-                         center = (input$center_vars == 'Yes'), 
-                         scale = (input$scale_vars == 'Yes'))
-    # data.frame of PCs
-    pcs_df <- cbind(colics, pca_output$x)
-    
-    return(list(data_sub = data_sub,
-                pca_output = pca_output, 
-                pcs_df = pcs_df))
-  })
   
-  output$biplot <- renderPlot({
-    # would be good to figure out how not to cut off labels
-    # set xlim and ylim to be twice that of the ranges of the pcs?
-    # would also be good to vectorize which pcs are used for axes
-    # with the option choices=c(1,3)
-    return(biplot(pca()$pca_output))
-  })
+
 }
