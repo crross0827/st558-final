@@ -88,7 +88,6 @@ ui <- navbarPage("Horse Colic",
                       mainPanel(
                         plotlyOutput("plot"),
                         tableOutput("summaryTable")
-                        # downloadButton("downloadPlot")
                       )
                     )
            ), # end tab
@@ -117,13 +116,6 @@ ui <- navbarPage("Horse Colic",
                       mainPanel(
                         plotOutput("biplot")
                       )
-                      # would like to do another side panel here
-                      # that lets you choose the pcs to use in biplot
-                      # and a categorical variable
-                      # would like to add plots from lecture and cluster
-                      # like plot from example 
-                      # https://github.com/benmarwick/Interactive_PCA_Explorer
-                      # maybe an option to select which plot to view
                     )
                     
            ), # end  tab,
@@ -140,9 +132,6 @@ ui <- navbarPage("Horse Colic",
                    sliderInput("ntree", "number of trees", 500, 
                                 min = 1, max = 5000, step = 1),
                    uiOutput("mtry_selector")
-                   # add some kind of server side validation of these parameters 
-                   # with text feedback here
-
                  ),
                  selectInput("target", "Choose a target variable:",
                              choices = c("outcome", "lesion_surgical"),

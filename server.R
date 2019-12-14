@@ -1,7 +1,7 @@
 library(shiny)
 library(tidyverse)
-library(dplyr)
 library(plyr)
+library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(plotly)
@@ -14,7 +14,7 @@ process_data <- function(colics) {
   # specify column names
   
   names <- c("surgery", "age", "id", "temp", "pulse", "respiration_rate", 
-             "extremitites", "peripheral_pulse", "mucous_membrane", 
+             "extremities", "peripheral_pulse", "mucous_membrane", 
              "capillary_refill", "pain", "peristalsis", "distension", "tube_gas", 
              "reflux_volume", "reflux_pH", "feces", "abdomen", "cell_volume", 
              "protein", "fluid_appearance", "fluid_protein", "outcome", 
@@ -28,7 +28,7 @@ process_data <- function(colics) {
                          ordered=FALSE)
   colics$age <- factor(colics$age, levels=c("1", "9"), labels=c("adult", "juvenile"), 
                      ordered=FALSE)
-  colics$extremitites <- factor(colics$extremitites, levels=c("2", "1", "3", "4"),
+  colics$extremities <- factor(colics$extremities, levels=c("2", "1", "3", "4"),
                            labels=c("warm", "normal", "cool", "cold"), ordered=TRUE)
   colics$peripheral_pulse <- factor(colics$peripheral_pulse, levels=c("2", "1", "3", "4"),
                               labels=c("increased", "normal", "reduced", "absent"),
@@ -146,27 +146,12 @@ server <- function(input, output) {
   
   # === FOR SIDE PANEL
   
-  # choose first variable
-  output$var1Selector <- renderUI({
-    selectInput("var1", "Choose Variable:", c('--none--', names(colics))) 
-  })
-  
-  # second variable can be any but not the same as the first
-  output$var2Selector <- renderUI({
-    data_names <- names(colics)
-    data_names <- data_names[data_names != input$var1]
-    selectInput("var2", "Choose Another Variable:", c('--none--', data_names)) 
-  })
-  
-  # for conditional panel for var3
   output$bothQuant <- reactive({
-  if (exists("input$var1") & exists("input$var2")){
     if ((input$var1 %in% num_cols) & (input$var2 %in% num_cols)) {
+      print('both in num_cols')
       return(TRUE)
     }
     else {return(FALSE)}
-  }
-  else {return(FALSE)}
   })
   
   # for conditional panel for var3
@@ -178,6 +163,20 @@ server <- function(input, output) {
     fac_cols <- names(colics)[!nums]
     selectInput("var3", "Color Points By:", c('--none--', fac_cols)) 
   })
+  
+  
+  # choose first variable
+  output$var1Selector <- renderUI({
+    selectInput("var1", "Choose Variable:", c('--none--', names(colics))) 
+  })
+  
+  # second variable can be any but not the same as the first
+  output$var2Selector <- renderUI({
+    data_names <- names(colics)
+    data_names <- data_names[data_names != input$var1]
+    selectInput("var2", "Choose Another Variable:", c('--none--', data_names)) 
+  })
+
   
   # === FOR MAIN PANEL
   
@@ -205,6 +204,7 @@ server <- function(input, output) {
         }
       }
       else { # var 1 is quantitative var2 is categorical
+        print('var1 is quant var2 is cat')
         summary_tbl <- colics %>% 
           group_by_(input$var2) %>% 
           summarise(minimum = min(get(input$var1)), 
@@ -221,6 +221,7 @@ server <- function(input, output) {
         names(summary_tbl) <- c(input$var1, "Frequency")
       }
       else if (input$var2 %in% num_cols) { # var1 is categorical, var2 is quantitative
+        print('var1 is cat var2 is quant')
         summary_tbl <- colics %>% 
           group_by_(input$var1) %>% 
           summarise(minimum = min(get(input$var2)), 
@@ -253,7 +254,9 @@ server <- function(input, output) {
           labs(x = input$var1)
       }
       else if (input$var2 %in% num_cols){ # var2 is quantitative
+        print('both quantitative')
         if (input$var3 == '--none--'){ # var3 is not selected
+          print('var3 is none')
           g <- ggplot(colics, aes_string(x = input$var1, y = input$var2)) +
             geom_point(alpha = 0.6) + 
             labs(x = input$var1, y = input$var2)
@@ -292,6 +295,7 @@ server <- function(input, output) {
     }
     return(ggplotly(g))
   })
+  
   
   # FOR UNSUPERVISED LEARNING TAB =======================================
   
@@ -403,7 +407,24 @@ server <- function(input, output) {
         model <<- randomForest(formula, data = train, mtry = mtry, 
                                ntree = ntree, importance = TRUE)
       }
+    }) # end with progress
+    
+    # output summary
+    # need it here to be reactive with train button
+    output$model_summary <- renderPrint({
+      if (exists("model")){
+        if (model_type_static == "Random Forest"){
+          return(print(model$importance))
+        }
+        else {
+          return(print(summary(model)))
+        }
+      }
+      else {
+        return(NULL)
+      }
     })
+  })
     
     # get text to display in main panel
     output$prediction <- renderText({
@@ -455,28 +476,4 @@ server <- function(input, output) {
       
     })
     
-    
-    # === FOR MAIN PANEL
-    
-    # output summary
-    output$model_summary <- renderPrint({
-      if (exists("model")){
-        if (model_type_static == "Random Forest"){
-          return(print(model$importance))
-        }
-        else {
-          return(print(summary(model)))
-        }
-      }
-      else {
-        return(NULL)
-      }
-    })
-
-    
-  })
-  
-
-  
-
 }
